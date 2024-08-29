@@ -1,0 +1,75 @@
+#!/bin/bash
+
+HANDHOLD_DIR="${HOME}/.handhold"
+ACTIVE_TASK_FILE="${HANDHOLD_DIR}/.active_task"
+CURRENT_COMMAND_FILE="${HANDHOLD_DIR}/.current_command"
+
+# Function to load a task
+function load_task() {
+    local task_name="$1"
+    local task_file="${HANDHOLD_DIR}/${task_name}.instruct"
+    
+    if [[ -f "$task_file" ]]; then
+        echo "$task_file" > "$ACTIVE_TASK_FILE"
+        echo "1" > "$CURRENT_COMMAND_FILE"
+        echo "Task '$task_name' loaded."
+    else
+        echo "Task file '$task_name.instruct' not found in ${HANDHOLD_DIR}."
+    fi
+}
+
+# Function to get the next command from the loaded task
+function get_next_command() {
+    if [[ -f "$ACTIVE_TASK_FILE" ]]; then
+        local task_file=$(<"$ACTIVE_TASK_FILE")
+        local current_command=$(<"$CURRENT_COMMAND_FILE")
+        local command=$(sed -n "${current_command}p" "$task_file")
+
+        if [[ -n "$command" ]]; then
+            echo "$command"
+            echo $((current_command + 1)) > "$CURRENT_COMMAND_FILE"
+        else
+            echo "No more commands."
+            echo "1" > "$CURRENT_COMMAND_FILE"
+        fi
+    else
+        echo "No active task. Load a task using 'handhold load <task>' first."
+    fi
+}
+
+# Main function to handle the script's arguments
+function handhold() {
+    case "$1" in
+        load)
+            load_task "$2"
+            ;;
+        get_next_command)
+            get_next_command
+            ;;
+        *)
+            echo "Usage: handhold load <task_name>"
+            ;;
+    esac
+}
+
+# If the script is called directly with arguments, process them
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    handhold "$@"
+fi
+
+# Function to load the next command and update READLINE_LINE
+function handhold_load_command {
+    local command=$(handhold get_next_command)
+    if [[ "$command" != "No more commands." ]]; then
+        READLINE_LINE="$command"
+        READLINE_POINT=${#READLINE_LINE}
+    else
+        echo "$command"
+    fi
+}
+
+# Bind Ctrl+k to the handhold_load_command function in bash
+if [[ -n "$BASH_VERSION" ]]; then
+    bind -x '"\C-k":handhold_load_command'
+fi
+
